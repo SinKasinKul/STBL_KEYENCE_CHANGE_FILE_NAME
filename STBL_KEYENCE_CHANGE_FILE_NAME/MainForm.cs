@@ -11,12 +11,15 @@ using System.Net;
 using System.Net.Sockets;
 using System.Diagnostics;
 using System.Threading;
+using System.Configuration;
+using System.IO;
+using System.Xml.Linq;
 
 namespace STBL_KEYENCE_CHANGE_FILE_NAME
 {
     public partial class MainForm : Form
     {
-        string SocketIP, SocketPort, SocketConnect;
+        string SocketIP, SocketPort;
         string MainBarcode;
 
         public delegate void callrichtext(String ss);
@@ -29,23 +32,89 @@ namespace STBL_KEYENCE_CHANGE_FILE_NAME
         private static readonly byte[] buffer = new byte[BUFFER_SIZE];
         public MainForm()
         {
+            
             InitializeComponent();
-            SocketIP = "10.0.112.165";
-            SocketPort = "9004";
+            var appSettings = ConfigurationManager.AppSettings;
+            string vIP = appSettings.Get("IP");
+            string vPort = appSettings.Get("Port");
+            SocketIP = vIP;
+            SocketPort = vPort;
             TextBox.CheckForIllegalCrossThreadCalls = false;
             ConnectToSR1000();
+            
         }
 
         private void MainForm_Load(object sender, EventArgs e)
         {
-            SR1000Scan();
+            Int32 TimeInt = 1000;
+            timerConnectSR1000.Interval = TimeInt;
+            timerConnectSR1000.Tick += new EventHandler(timerConnectSR1000_Tick);
+            timerConnectSR1000.Enabled = true;
+
+            lbIP.Text = SocketIP;
         }
 
         private void SR1000Scan()
         {
-            SendText("LON\r");
-            Thread.Sleep(1000);
-            SendText("LOFF\r");
+            if (_ClientSocket.Connected)
+            {
+                SendText("LON\r");
+                Thread.Sleep(1000);
+                SendText("LOFF\r");
+                tbBarcode.Text = MainBarcode;
+            }
+        }
+        private void UpdateFileName()
+        {
+            try
+            {
+                rTBResult.Text = "";
+                var appSettings = ConfigurationManager.AppSettings;
+                string pahtFile = appSettings.Get("Path");
+
+                string pathBackUp = pahtFile + "Backup\\";
+                string Date = DateTime.Now.ToString("yyyyMMdd");
+                string DateII = DateTime.Now.ToString("yyyyMMddHHmmss");
+                string BackUpdir = pathBackUp + Date + "\\";
+
+                if (!Directory.Exists(BackUpdir))
+                {
+                    Directory.CreateDirectory(BackUpdir);
+                }
+
+                string[] txtList = Directory.GetFiles(pahtFile, "*.jpeg");
+                if (txtList.Length > 0)
+                {
+                    SR1000Scan();
+
+                    string NewFileName = MainBarcode.Substring(0, MainBarcode.Length - 2) + "_" + DateII + ".jpeg";
+                    foreach (string sf in txtList)
+                    {
+                        string fName = sf.Substring(pahtFile.Length);
+                        try
+                        {
+                            if (MainBarcode.Length > 0)
+                            {
+                                File.Move(pahtFile + fName, BackUpdir + NewFileName);
+                                ResultStatus("Move " + fName + " success.");
+                                tbBarcode.Text = "";
+                                MainBarcode = "";
+                            }
+                        }
+                        catch
+                        {
+                            ResultStatus("Move " + fName + " fail.");
+                            tbBarcode.Text = "";
+                            MainBarcode = "";
+                        }
+                        
+                    }
+                }
+            }
+            catch (Exception Ex)
+            {
+                ResultStatus("Path file have been error.");
+            }
         }
         private void button1_Click(object sender, EventArgs e)
         {
@@ -63,13 +132,25 @@ namespace STBL_KEYENCE_CHANGE_FILE_NAME
                 ResultStatus("Error Msg :: " + ex);
             }
         }
-
         private void ConnectToSR1000()
         {
-            IPEndPoint iep = new IPEndPoint(IPAddress.Parse(SocketIP), int.Parse(SocketPort));
-            _ClientSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-            _ClientSocket.Connect(iep);
-            rTBResult.Text = _ClientSocket.Connected.ToString();
+            try
+            {
+                IPEndPoint iep = new IPEndPoint(IPAddress.Parse(SocketIP), int.Parse(SocketPort));
+                _ClientSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                _ClientSocket.Connect(iep);
+                ResultStatus("Connected");
+                lbSRStatus.Text = "Connected";
+                lbSRStatus.BackColor = Color.MediumSeaGreen;
+                lbSRStatus.ForeColor = Color.White;
+            }
+            catch (Exception Ex)
+            {
+                ResultStatus("Connection Error");
+                lbSRStatus.Text = "onnection Error";
+                lbSRStatus.BackColor = Color.Red;
+                lbSRStatus.ForeColor = Color.White;
+            }
         }
         private void ReceiveData(IAsyncResult iar)
         {
@@ -89,7 +170,7 @@ namespace STBL_KEYENCE_CHANGE_FILE_NAME
                 var data = new byte[received];
                 Array.Copy(buffer, data, received);
                 string receivedData = Encoding.ASCII.GetString(data);
-
+                MainBarcode = receivedData;
                 ResultStatus(receivedData);
             }
             catch (Exception ex)
@@ -121,6 +202,26 @@ namespace STBL_KEYENCE_CHANGE_FILE_NAME
                 ResultStatus(ex.Message);
             }
         }
+        private void timerConnectSR1000_Tick(object sender, EventArgs e)
+        {
+            if (bgWReadFile.IsBusy != true)
+            {
+                bgWReadFile.RunWorkerAsync();
+            }
+
+            int Date = int.Parse(DateTime.Now.ToString("ss"));
+        }
+
+        private void button2_Click(object sender, EventArgs e)
+        {
+            UpdateFileName();
+        }
+
+        private void bgWReadFile_DoWork(object sender, DoWorkEventArgs e)
+        {
+            UpdateFileName();
+        }
+
         public void ResultStatus(string RText)
         {
             string dateLog = DateTime.Now.ToString("yyyy-MM-dd hh:mm:ss");
