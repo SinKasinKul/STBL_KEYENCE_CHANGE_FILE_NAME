@@ -63,7 +63,6 @@ namespace STBL_KEYENCE_CHANGE_FILE_NAME
                 ResultStatus("Error Msg :: " + ex);
             }
         }
-
         private void ConnectToSR1000()
         {
             IPEndPoint iep = new IPEndPoint(IPAddress.Parse(SocketIP), int.Parse(SocketPort));
