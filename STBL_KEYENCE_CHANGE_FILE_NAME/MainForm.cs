@@ -147,7 +147,7 @@ namespace STBL_KEYENCE_CHANGE_FILE_NAME
             catch (Exception Ex)
             {
                 ResultStatus("Connection Error");
-                lbSRStatus.Text = "onnection Error";
+                lbSRStatus.Text = "Connection Error";
                 lbSRStatus.BackColor = Color.Red;
                 lbSRStatus.ForeColor = Color.White;
             }
